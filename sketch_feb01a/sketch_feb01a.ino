@@ -1,23 +1,23 @@
 #include "vector2.h"
 
-// Put key coordinates here
+int leftMotor = 0, rightMotor = 0;
+int leftSpeed = 0, rightSpeed = 0;
 
+// Put key coordinates here
 const vector2 NORTH = {0,1};
 vector2 target = {0,0};
 vector2 currentPos = {0,0};
 float currentRot = 0; // Measured from north
 
 void setup() {
-  // Setup code
+    pinMode(leftMotor, OUTPUT);
+    pinMode(rightMotor, OUTPUT);
 }
 
 void loop() {
   // Main loop
 
-  // Update path to target
-  vector2 targetDirection = getDirection(currentPos,target);
-  float targetRot = getAngle(NORTH,targetDirection);
-  rotate(180 + targetRot - currentRot);
+  
 
   // Avoid collisions OR carry out action if at target
 }
@@ -43,12 +43,37 @@ float magnitude(vector2 v){
   return sqrt(pow(v.x,2) + pow(v.y,2));
 }
 
-// Rotate the robot theta degrees clockwise
-void rotate(float theta){
-  // TODO
+//Move to a point x,y
+void moveTo(vector2 target){
+  // Update path to target
+  vector2 targetDirection = getDirection(currentPos,target);
+  float targetRot = getAngle(NORTH,targetDirection);
+  rotate(180 + targetRot - currentRot);
 }
 
-// Move the robot forward x units
+// Rotate the robot theta degrees clockwise
+void rotate(float theta, int speed){
+
+  if(theta > 0){
+    analogWrite(leftMotor, speed);
+    analogWrite(rightMotor, -speed);
+  }else{
+    theta = theta * -1;
+    analogWrite(leftMotor, -speed);
+    analogWrite(rightMotor, speed);
+  }
+  
+  float rotation = 0;
+  
+  while(theta - rotation > 0){
+    rotation += somecalculatedangle;
+  }
+
+  analogWrite(leftMotor, 0);
+  analogWrite(rightMotor, 0);
+}
+
+// Move the robot forward x units (PID?)
 void moveForward(float x){
   // TODO
 }
