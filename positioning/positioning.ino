@@ -19,42 +19,30 @@
 
 //The ID of the big bad guy we are supposed to avoid
 uint16_t the_big_bad = 0x6646;                            // set this to the ID of the remote device
-bool avoid_the_big_bad = false;                           // For testing purposes
+bool avoid_the_big_bad = true;                           // For testing purposes
 
 uint8_t num_anchors = 3;                                    // the number of anchors
 uint16_t anchors[3] = {0x6645, 0x6600, 0x661E};     // the network id of the anchors: change these to the network ids of your anchors.
-int32_t anchors_x[3] = {1000, 0, 3022};              // anchor x-coorindates in mm (-> that way)
-int32_t anchors_y[3] = {0, 1000, 1000};              // anchor y-coordinates in mm (v that way)
-int32_t anchors_z[3] = {350, 350, 350};              // anchor z-coordinates in mm (height)
+int32_t anchors_x[3] = {0, 1250, 0};              // anchor x-coorindates in mm (-> that way)
+int32_t anchors_y[3] = {0, 595, 1190};              // anchor y-coordinates in mm (v that way)
+int32_t anchors_z[3] = {0, 0, 0};              // anchor z-coordinates in mm (height)
 
 
 uint8_t algorithm = POZYX_POS_ALG_UWB_ONLY;             // positioning algorithm to use
 uint8_t dimension = POZYX_3D;                           // positioning dimension
-int32_t height = 1000;                                  // height of device, required in 2.5D positioning
+int32_t height = 200;                                  // height of device, required in 2.5D positioning
 
 
 ////////////////////////////////////////////////
 
 void setup(){
-  Serial.begin(115200);
+  Serial.begin(9600);
   
   if(Pozyx.begin() == POZYX_FAILURE){
     Serial.println(F("ERROR: Unable to connect to POZYX shield"));
-    Serial.println(F("Reset required"));
     delay(100);
     abort();
   }
-  
-  Serial.println(F("----------POZYX POSITIONING V1.0----------"));
-  Serial.println(F("NOTES:"));
-  Serial.println(F("- No parameters required."));
-  Serial.println();
-  Serial.println(F("- System will auto start anchor configuration"));
-  Serial.println();
-  Serial.println(F("- System will auto start positioning"));
-  Serial.println(F("----------POZYX POSITIONING V1.0----------"));
-  Serial.println();
-  Serial.println(F("Performing manual anchor configuration:"));
   
   // clear all previous devices in the device list
   Pozyx.clearDevices();
@@ -97,6 +85,7 @@ void trackTheBigBad(){
   if (status == POZYX_SUCCESS){
     if(big_bad_distance.distance < 1000){
       //Fucking panic the big bad is out to get us
+      Serial.println("THE BIG BAD");
     }
   }else{
     // Assume the big bad has been destroyed
@@ -104,17 +93,13 @@ void trackTheBigBad(){
   }
 }
 
-// prints the coordinates for either humans or for processing
+// prints the coordinates for arduino/serial monitor
 void printCoordinates(coordinates_t coor){
   Serial.print(coor.x);
   Serial.print(",");
   Serial.print(coor.y);
   Serial.print(",");
   Serial.println(coor.z);
-}
-
-void sendCoordinates(coordinates_t coor){
-  //Send coordinates to motor arduino
 }
 
 // error printing function for debugging
