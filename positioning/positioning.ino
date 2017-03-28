@@ -39,7 +39,7 @@ void setup(){
   Serial.begin(9600);
   
   if(Pozyx.begin() == POZYX_FAILURE){
-    Serial.println(F("ERROR: Unable to connect to POZYX shield"));
+    Serial.print(F("ERROR: Unable to connect to POZYX shield\n"));
     delay(100);
     abort();
   }
@@ -49,10 +49,10 @@ void setup(){
   // sets the anchor manually
   setAnchorsManual();
 
-  printCalibrationResult();
-  delay(2000);
+  //printCalibrationResult();
+  //delay(2000);
 
-  Serial.println(F("Starting positioning: "));
+  //Serial.print(F("Starting positioning:\n"));
 }
 
 void loop(){
@@ -85,7 +85,7 @@ void trackTheBigBad(){
   if (status == POZYX_SUCCESS){
     if(big_bad_distance.distance < 1000){
       //Fucking panic the big bad is out to get us
-      Serial.println("THE BIG BAD");
+      Serial.print("THE BIG BAD\n");
     }
   }else{
     // Assume the big bad has been destroyed
@@ -99,7 +99,8 @@ void printCoordinates(coordinates_t coor){
   Serial.print(",");
   Serial.print(coor.y);
   Serial.print(",");
-  Serial.println(coor.z);
+  Serial.print(coor.z);
+  Serial.print("\n");
 }
 
 // error printing function for debugging
@@ -110,7 +111,8 @@ void printErrorCode(String operation){
   Serial.print("ERROR ");
   Serial.print(operation);
   Serial.print(", local error code: 0x");
-  Serial.println(error_code, HEX);
+  Serial.print(error_code, HEX);
+  Serial.print("\n");
 }
 
 // print out the anchor coordinates
@@ -120,8 +122,8 @@ void printCalibrationResult(){
 
   status = Pozyx.getDeviceListSize(&list_size);
   Serial.print("list size: ");
-  Serial.println(status*list_size);
-  
+  Serial.print(status*list_size);
+  Serial.print("\n");
   if(list_size == 0){
     printErrorCode("configuration");
     return;
@@ -146,7 +148,8 @@ void printCalibrationResult(){
     Serial.print(",");
     Serial.print(anchor_coor.y);
     Serial.print(",");
-    Serial.println(anchor_coor.z);
+    Serial.print(anchor_coor.z);
+    Serial.print("\n");
   }    
 }
 
@@ -161,4 +164,4 @@ void setAnchorsManual(){
     anchor.pos.z = anchors_z[i];
     Pozyx.addDevice(anchor);
  }
-}
+
