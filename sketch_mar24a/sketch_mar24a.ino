@@ -160,4 +160,9 @@ void rightEncoderInterrupt(){
   r_motor_rotation++;
 }
 
+void serialEvent(){
+  char byteRead = Serial.read();
+  Serial.print(byteRead);
+}
+
 
