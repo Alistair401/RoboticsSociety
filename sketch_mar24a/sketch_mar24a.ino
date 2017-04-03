@@ -51,6 +51,8 @@ struct location{
 };
 
 location pos;
+currentmodule = 0
+modules_size = 1
 location modules[] = {};
 location target;
 
@@ -120,15 +122,23 @@ void loop() {
   if (finished == true){
     return;
   }
+  
   moveToTarget();
+
   if (atTarget() == true){
+    stopMotors()
+
     if (target.dropOff == true){
       reverseIntake();
-      selectTarget();
-      }  
+    }  
+
+    selectTarget();
   }
+
   if (timeElapsed >= 90000){
     launchRocket();
+    stopMotors();
+    finished = true;
   }
 }
 
@@ -145,10 +155,13 @@ bool checkObstacle(){
 
 void moveToTarget(){
   Serial.println("MOVING TO TARGET");
+  face(target);
+  moveForward();
 }
 
 void selectTarget(){
   Serial.println("SELECTING TARGET");
+  target = modules[++curentModule%modules_size];
 }
 
 void avoidObstacle(){
@@ -156,7 +169,12 @@ void avoidObstacle(){
 }
 
 bool atTarget(){
-  Serial.println("TARGET REACHED");
+  if(distance(pos, target) < 500){
+    Serial.println("TARGET REACHED");
+    return true;
+  }
+
+  return false;
 }
 
 
@@ -164,7 +182,10 @@ bool atTarget(){
 // MOVEMENT, MOTORS, ENCODERS
 // ==========================
 void reverseIntake(){
-  
+    //Reverse the motor
+
+    //Wait for a bit
+    delay(100); 
 }
 
 void moveForward(){
@@ -179,7 +200,7 @@ void stopMotors(){
   analogWrite(pwm_l,motor_speed);
 }
 
-void face(){
+void face(location target){
   float angle = atan2(target.x - pos.x, target.y - pos.y);
   rotate(angle);
 }
@@ -247,7 +268,10 @@ void serialEvent(){
       // Only other messages should be coordinates, comma separated
       int xData,yData;
       sscanf(serialMessage.string,"%d,%d",&xData,&yData);
-      addToLL((location){xData,yData,false});
+      pos.x = xData;
+      pos.y = yData;
+
+      //addToLL((location){xData,yData,false});
     }
     freeMessage(&serialMessage);
     initMessage(&serialMessage,10);
@@ -289,7 +313,7 @@ void detectedRobot(){
 // MISC
 // ====
 void launchRocket(){
-  
+  digitalWrite(sol_enable, HIGH);
 }
 
 int distance(location* l1, location* l2){
