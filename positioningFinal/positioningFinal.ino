@@ -23,8 +23,8 @@ bool avoid_the_big_bad = true;                           // For testing purposes
 
 uint8_t num_anchors = 3;                                    // the number of anchors
 uint16_t anchors[3] = {0x6645, 0x6600, 0x661E};     // the network id of the anchors: change these to the network ids of your anchors.
-int32_t anchors_x[3] = {0, 1250, 0};              // anchor x-coorindates in mm (-> that way)
-int32_t anchors_y[3] = {0, 595, 1190};              // anchor y-coordinates in mm (v that way)
+int32_t anchors_x[3] = {-22, 3022, -22};              // anchor x-coorindates in mm (-> that way)
+int32_t anchors_y[3] = {-22, 1000, 2022};              // anchor y-coordinates in mm (v that way)
 int32_t anchors_z[3] = {0, 0, 0};              // anchor z-coordinates in mm (height)
 
 

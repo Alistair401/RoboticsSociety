@@ -11,6 +11,11 @@
 // - translating playing area locations to variables to store in the modules[] array (maybe modules is a bad name for it)
 
 #include <elapsedMillis.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_LSM303_U.h>
+
+Adafruit_LSM303_Mag_Unified mag = Adafruit_LSM303_Mag_Unified(30);
+
 
 // define motor driver pins
 // l = left, r = right
@@ -44,6 +49,11 @@
 #define enable_mot1 16
 #define enable_mot2 2
 
+#define gyro_data 20 
+#define gyro_clock 21
+
+bool intake_intaking = true;
+
 struct location{
   int x;
   int y;
@@ -51,9 +61,40 @@ struct location{
 };
 
 location pos;
-currentmodule = 0
-modules_size = 1
-location modules[] = {};
+
+bool leaving_shuttle = true;
+int leave_stage = 0;
+int leave_stages = 3;
+
+//How to leave the shuttle
+location leave_shuttle[] = {
+    //The edge of the ramp leading out the spaceship
+   (location){360, 360, false},
+   (location){890, 360, false},
+   (location){890, 540, false},
+};
+
+bool dock = false;
+bool undock = false;
+int dockstage = 0;
+int dockstages = 2;
+
+//How to dock/undock from the bay thing
+location docking[] = {
+  (location){710, 1350, false},
+  (location){1150, 1870, true},
+};
+
+//Cylinders. In the order we want to get them.
+location modules[] = {
+  (location){710,480,false},
+  (location){710,600,false},
+  (location){650,540,false},
+};
+
+int current_module = 0;
+int num_modules = 1;
+
 location target;
 
 struct message{
@@ -81,7 +122,7 @@ elapsedMillis timeElapsed;
 
 bool finished = false;
 
-int motor_speed;
+int motor_speed = 255;
 
 int l_motor_rotation = 0;
 int r_motor_rotation = 0;
@@ -98,6 +139,12 @@ void setup() {
   Serial.println("Robotics Team 2");
   Serial.println("SETUP...");
   initMessage(&serialMessage,10);
+
+  if(!mag.begin()){
+    /* There was a problem detecting the LSM303 ... check your connections */
+    Serial.println("Ooops, no LSM303 detected ... Check your wiring!");
+    while(1);
+  }
   
   pinMode(pwm_r,OUTPUT);
   pinMode(dir_r,OUTPUT);
@@ -109,9 +156,16 @@ void setup() {
   pinMode(ir_rec_f1,INPUT);
   pinMode(ir_rec_r0,INPUT);
   pinMode(ir_rec_r1,INPUT);
+  pinMode(enable_mot1,INPUT);
+  pinMode(enable_mot2,INPUT);
+  pinMode(forward_mot1,INPUT);
+  pinMode(forward_mot2,INPUT);
+  pinMode(reverse_mot1,INPUT);
+  pinMode(reverse_mot2,INPUT);
+
+  setIntakePull();
   attachInterrupt(encoder_l,leftEncoderInterrupt,FALLING);
   attachInterrupt(encoder_r,rightEncoderInterrupt,FALLING);
-  
   selectTarget();
 }
 
@@ -119,6 +173,11 @@ void setup() {
 // MAIN LOOP AND LOGIC
 // ===================
 void loop() {
+
+  rotate(0.7853);
+  delay(300);
+  return;
+
   if (finished == true){
     return;
   }
@@ -126,20 +185,30 @@ void loop() {
   moveToTarget();
 
   if (atTarget() == true){
-    stopMotors()
+    stopMotors();
 
     if (target.dropOff == true){
+      reverseIntake();
+      delay(10);
+      moveBackward();
+      delay(100);
       reverseIntake();
     }  
 
     selectTarget();
   }
-
+  
   if (timeElapsed >= 90000){
-    launchRocket();
     stopMotors();
+    launchRocket();
+    
     finished = true;
   }
+
+}
+
+void finish(){
+  
 }
 
 bool checkObstacle(){
@@ -155,21 +224,32 @@ bool checkObstacle(){
 
 void moveToTarget(){
   Serial.println("MOVING TO TARGET");
-  face(target);
-  moveForward();
+
+  Serial.println(getAngle(pos, target));
+  if(abs(getAngle(pos, target)) > 0.2){
+    face(target);
+  }else{
+    moveForward();
+  }
 }
 
 void selectTarget(){
   Serial.println("SELECTING TARGET");
-  target = modules[++curentModule%modules_size];
+
+  if(leave_stage == leave_stages-1){
+    finished = true;
+  }else{
+    target = leave_shuttle[leave_stage];
+    leave_stage++;
+  }
 }
 
 void avoidObstacle(){
-  Serial.println("AVOIDING OBSTACLE");
+  Serial.println("AVOIDING OBSTACLE lol no we're not stop");
 }
 
 bool atTarget(){
-  if(distance(pos, target) < 500){
+  if(distance(&pos, &target) < 500){
     Serial.println("TARGET REACHED");
     return true;
   }
@@ -183,9 +263,27 @@ bool atTarget(){
 // ==========================
 void reverseIntake(){
     //Reverse the motor
+    if(intake_intaking){
+      setIntakePush();
+    }else{
+      setIntakePull();
+    }
+}
 
-    //Wait for a bit
-    delay(100); 
+void setIntakePush(){
+  intake_intaking = false;
+  digitalWrite(forward_mot1,0);
+  digitalWrite(forward_mot2,0);
+  digitalWrite(reverse_mot1,255);
+  digitalWrite(reverse_mot2,255);
+}
+
+void setIntakePull(){
+  intake_intaking = true;
+  digitalWrite(forward_mot1,255);
+  digitalWrite(forward_mot2,255);
+  digitalWrite(reverse_mot1,0);
+  digitalWrite(reverse_mot2,0);
 }
 
 void moveForward(){
@@ -195,16 +293,66 @@ void moveForward(){
   analogWrite(pwm_l,motor_speed);
 }
 
-void stopMotors(){
+void moveBackward(){
+  digitalWrite(dir_r,HIGH);
+  digitalWrite(dir_l,LOW);
   analogWrite(pwm_r,motor_speed);
   analogWrite(pwm_l,motor_speed);
 }
 
+void stopMotors(){
+  analogWrite(pwm_r,0);
+  analogWrite(pwm_l,0);
+}
+
 void face(location target){
-  float angle = atan2(target.x - pos.x, target.y - pos.y);
+  float angle = getAngle(pos,target);
   rotate(angle);
 }
 
+float getAngle(location x, location y){
+  return atan2(y.x - x.x, y.y - x.y);
+}
+
+
+//Rotate using gyroscope
+void rotate(float angle){
+  
+  sensors_event_t event; 
+  mag.getEvent(&event);
+
+  float startrot = atan2(event.magnetic.y,event.magnetic.x);
+
+  bool clockwise = true;
+  if (angle > PI){
+    clockwise = false;
+    angle = (2 * PI) - angle;
+  }
+  if (clockwise == true){
+    digitalWrite(dir_r,HIGH);
+    digitalWrite(dir_l,HIGH);
+  } else {
+    digitalWrite(dir_r,LOW);
+    digitalWrite(dir_l,LOW);
+  }
+
+  Serial.println("ROTATING");
+  while (1){
+    mag.getEvent(&event);
+    float rot = atan2(event.magnetic.y,event.magnetic.x);
+    if(startrot - rot >= angle){
+      break;
+    }
+
+    Serial.println("wew");
+    analogWrite(pwm_r,motor_speed);
+    analogWrite(pwm_l,motor_speed);
+  }
+
+  stopMotors();
+}
+
+/*
 void rotate(float angle){
   // angle is in radians
   // 2000 pulses from the encoder is PI of rotation
@@ -235,15 +383,13 @@ void rotate(float angle){
   
   int i = 0;
   while (l_motor_rotation - current_rot_l < angle * rotation_factor){
-    if (i % 20 == 0){
-      Serial.print(".");
-    }
-    i++;
+    delay(10);
+    Serial.print(angle);
   }
 
   analogWrite(pwm_r,0);
   analogWrite(pwm_l,0);
-}
+}*/
 
 void leftEncoderInterrupt(){
   l_motor_rotation++;
@@ -323,7 +469,7 @@ int distance(location* l1, location* l2){
   return dist;
 }
 
-void addToLL(location l){
+/*void addToLL(location l){
   if (listSize == listCap){
     rollingXTotal -= head->loc.x;
     rollingYTotal -= head->loc.y;
@@ -347,5 +493,5 @@ void addToLL(location l){
     rollingXTotal += l.x;
     rollingYTotal += l.y;
     listSize++;
-}
+}*/
 
