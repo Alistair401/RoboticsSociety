@@ -63,24 +63,27 @@ struct location{
 location pos;
 
 bool leaving_shuttle = true;
+bool returning_to_shuttle = false;
+
 int leave_stage = 0;
 int leave_stages = 3;
 
 //How to leave the shuttle
-location leave_shuttle[] = {
+location leave_shuttle_path[] = {
     //The edge of the ramp leading out the spaceship
    (location){360, 360, false},
    (location){890, 360, false},
    (location){890, 540, false},
 };
 
-bool dock = false;
-bool undock = false;
-int dockstage = 0;
-int dockstages = 2;
+bool docking_with_moonbase = false;
+bool undocking_with_moonbase = false;
+
+int dock_stage = 0;
+int dock_stages = 2;
 
 //How to dock/undock from the bay thing
-location docking[] = {
+location docking_path[] = {
   (location){710, 1350, false},
   (location){1150, 1870, true},
 };
@@ -88,8 +91,6 @@ location docking[] = {
 //Cylinders. In the order we want to get them.
 location modules[] = {
   (location){710,480,false},
-  (location){710,600,false},
-  (location){650,540,false},
 };
 
 int current_module = 0;
@@ -236,11 +237,26 @@ void moveToTarget(){
 void selectTarget(){
   Serial.println("SELECTING TARGET");
 
-  if(leave_stage == leave_stages-1){
-    finished = true;
-  }else{
-    target = leave_shuttle[leave_stage];
+  if(leave_stage == leave_stages){
+      leaving_shuttle = false;
+  }
+
+  if(dock_stage == dock_stages){
+    docking_with_moonbase = false;
+  }
+
+  //Leave the shuttle
+  if(leaving_shuttle == true){
+    target = leave_shuttle_path[leave_stage];
     leave_stage++;
+  //Dock with the moon base
+  }else if(docking_with_moonbase == true){
+    target = docking_path[dock_stage];
+    dock_stage++;
+  }else{
+    //Otherwise we must pick up a cylinder
+    target = modules[current_module];
+    current_module++;
   }
 }
 
