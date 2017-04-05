@@ -2,13 +2,13 @@
 // Code to run on the R2T2 robot for EuroBot
 // Pins are for an Arduino Due, requires pozyx beacons and the counterpart code running on an Ardunio Uno
 // STILL TODO:
-// - control front intake (the pins for it have been defined already)
-// - control the solonoid
-// - logic for selecting the next location to go to, updating the current position (rolling totals are provided, just need to divide to get an average)
-// - adjust rotation with compass heading (not essential, should be left for last)
+// - fix serial events code (does not detect enemy)
+// - logic for selecting the next location to go to (this kinda works, can probably be improved)
 // CHALLENGES:
 // - aligning with the drop off zone
-// - translating playing area locations to variables to store in the modules[] array (maybe modules is a bad name for it)
+// - rotating accurately and consistently
+// - magnometer is fucked
+// - Robot doesnt actually do shit :(
 
 #include <elapsedMillis.h>
 #include <Wire.h>
@@ -50,9 +50,6 @@ Adafruit_LSM303_Mag_Unified mag = Adafruit_LSM303_Mag_Unified(12345);
 #define enable_mot1 16
 #define enable_mot2 2
 
-#define gyro_data 20 
-#define gyro_clock 21
-
 bool intake_intaking = true;
 
 struct location{
@@ -73,6 +70,7 @@ location path[] = {
    (location){890, 170, false},
    //The first cylinder in our path
    (location){950,200,true},
+   //The cylinders in the spaceship or smth
    (location){1150, 0, true},
    (location){1150, 0, true},
    (location){1150, 0, true},
@@ -149,6 +147,8 @@ void setup() {
   pinMode(forward_mot2,OUTPUT);
   pinMode(reverse_mot1,OUTPUT);
   pinMode(reverse_mot2,OUTPUT);
+  pinMode(sol_enable, OUTPUT);
+  digitalWrite(sol_enable, LOW);
   digitalWrite(enable_mot1,HIGH);
   digitalWrite(enable_mot2,HIGH);
 
@@ -158,38 +158,56 @@ void setup() {
   selectTarget();
 }
 
+//Use in (very probable) case of fucking everything failing
+void HailMary(){
+  //Make a desperate bid for the one cylinder
+   moveForwards();
+   delay(11000);
+
+   //Retreat in shame to our cubby hole
+   moveBackwards();
+   delay(10000);
+   dropOff();
+
+   //Wait till the match is over
+   while(1){
+     if (timeElapsed >= 90000){
+       finish();
+     }
+     delay(1000);
+   }
+}
+
+void rotateTest(){
+  rotate(PI/4);
+  delay(2000);
+  rotate(-PI/4);
+  delay(2000);
+  rotate(PI/2);
+  delay(2000);
+  rotate(-PI/2);
+  delay(2000);
+    //Breaks
+  rotate(PI);
+  delay(2000);
+  rotate(-PI);
+  delay(2000);
+}
 // ===================
 // MAIN LOOP AND LOGIC
 // ===================
 void loop() {
-   rotate(PI/2);
-   delay(7000);
-   return;
-   moveForwards();
-   delay(7000);
-   moveBackwards();
-   delay(7000);
-   dropOff();
-   delay(20000);
-   return;
-
+   
   if (finished == true){
     return;
   }
+
+  HailMary();
   
-  moveToTarget();
+  //moveToTarget();
 
   if (atTarget() == true){
     stopMotors();
-
-    if (target.pickUp == true){
-      reverseIntake();
-      delay(10);
-      moveBackwards();
-      delay(100);
-      reverseIntake();
-    }  
-
     selectTarget();
   }
   
@@ -202,8 +220,12 @@ void loop() {
 void finish(){
   stopMotors();
   launchRocket();
-    
+   
   finished = true;
+
+  while(1){
+    delay(1000);
+  }
 }
 
 bool checkObstacle(){
@@ -220,7 +242,6 @@ bool checkObstacle(){
 void moveToTarget(){
   Serial.println("MOVING TO TARGET");
 
-  Serial.println(getAngle(pos, target));
   if(abs(getAngle(pos, target)) > 0.1){
     face(target);
   }else{
@@ -255,10 +276,11 @@ void selectTarget(){
 
 void avoidObstacle(){
   Serial.println("AVOIDING OBSTACLE lol no we're not stop");
+  stopMotors();
 }
 
 bool atTarget(){
-  if(distance(&pos, &target) < 5000){
+  if(distance(&pos, &target) < 500){
     Serial.println("TARGET REACHED");
     return true;
   }
@@ -366,7 +388,13 @@ void rotate(float angle){
     mag.getEvent(&event);
     rot = atan2(event.magnetic.y,event.magnetic.x);
     float delta = rot - startrot;
-    Serial.println(rot);
+    Serial.print(event.magnetic.x);
+    Serial.print(", ");
+    Serial.print(event.magnetic.y);
+    Serial.print(", ");
+    Serial.println(event.magnetic.z);
+    //Serial.println(rot);
+    delay(100);
     
     if(delta >= angle){
       break;
@@ -374,24 +402,23 @@ void rotate(float angle){
   }
 
   stopMotors();
-}
-*/
+}*/
 
 //Rotate using encoders
 void rotate(float angle){
   // angle is in radians
   // 2000 pulses from the encoder is PI of rotation
   // To go clockwise, dir_l and dir_r are set HIGH and LOW, but not necessarily in that order
-  int rotation_factor = 2000/PI;
+  int rotation_factor = 1514/PI;
   bool clockwise = true;
   Serial.println("ANGLE");
   Serial.println(angle);
   
   if (angle < 0){
-    angle = fmod(PI + -1*angle, 2*PI);
+    angle = fmod(PI + (-1*angle)-0.1, 2*PI);
   }
 
-  if (angle > PI){
+  if (angle > (PI+0.1)){
     clockwise = false;
     angle = fmod(angle,PI);
   }
@@ -406,8 +433,6 @@ void rotate(float angle){
   
   l_motor_rotation = 0;
   r_motor_rotation = 0;
-  int current_rot_l = 0;
-  int current_rot_r = 0;
   
   analogWrite(pwm_r,motor_speed);
   analogWrite(pwm_l,motor_speed);
@@ -418,16 +443,20 @@ void rotate(float angle){
   Serial.print(" | CLOCKWISE: ");
   Serial.println(clockwise);
   
-  while (l_motor_rotation - current_rot_l < angle * rotation_factor){
+  while (l_motor_rotation < (angle * rotation_factor)){
+    
+    if (timeElapsed >= 90000){
+      finish();
+    }
+
+    delay(10);
   }
 
-  analogWrite(pwm_r,0);
-  analogWrite(pwm_l,0);
+  stopMotors();
 }
 
 void leftEncoderInterrupt(){
   l_motor_rotation++;
-  Serial.println(l_motor_rotation);
 }
 
 void rightEncoderInterrupt(){
@@ -449,13 +478,14 @@ void serialEvent(){
       // Only other messages should be coordinates, comma separated
       int xData,yData;
       sscanf(serialMessage.string,"%d,%d",&xData,&yData);
-
+      Serial.println("Update position");
       addToLL((location){xData,yData,false});
     }
     freeMessage(&serialMessage);
     initMessage(&serialMessage,10);
   }
   else{
+    Serial.println("add");
     addToMessage(&serialMessage,byteRead);
   }
 }
@@ -531,4 +561,3 @@ void addToLL(location l){
   pos.x = rollingXTotal/(float)listSize;
   pos.y = rollingYTotal/(float)listSize;
 }
-
