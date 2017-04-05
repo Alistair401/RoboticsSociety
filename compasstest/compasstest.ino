@@ -22,9 +22,23 @@ void loop(void)
   mag.getEvent(&event);
   float Pi = 3.14159;
   // Calculate the angle of the vector y,x
-  float heading = atan2(event.magnetic.y,event.magnetic.x);
+  float rads = atan2(event.magnetic.y, event.magnetic.x);
 
-  Serial.print("Compass Heading: ");
-  Serial.println(heading);
+  if(rads < 0){
+    rads = rads + 2*PI;
+  }
+  
+  float heading = (rads * 180) / PI;
+
+  Serial.print(event.magnetic.x);
+  Serial.print(", ");
+  Serial.print(event.magnetic.y);
+  Serial.print(", ");
+  Serial.print(event.magnetic.z);
+  Serial.print("  Compass Heading: ");
+  Serial.print(heading);
+  Serial.print(" degrees or ");
+  Serial.print(rads);
+  Serial.println(" radians.");
   delay(500);
 }
