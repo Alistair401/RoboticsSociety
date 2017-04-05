@@ -163,6 +163,8 @@ void setup() {
 // ===================
 void loop() {
    rotate(PI/2);
+   delay(7000);
+   return;
    moveForwards();
    delay(7000);
    moveBackwards();
@@ -386,7 +388,6 @@ void rotate(float angle){
   Serial.println(angle);
   
   if (angle < 0){
-    clockwise = false;
     angle = fmod(PI + -1*angle, 2*PI);
   }
 
@@ -399,8 +400,8 @@ void rotate(float angle){
     digitalWrite(dir_r,LOW);
     digitalWrite(dir_l,HIGH);
   } else {
-    digitalWrite(dir_r,LOW);
-    digitalWrite(dir_l,HIGH);
+    digitalWrite(dir_r,HIGH);
+    digitalWrite(dir_l,LOW);
   }
   
   l_motor_rotation = 0;
