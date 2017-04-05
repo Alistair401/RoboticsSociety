@@ -11,10 +11,11 @@
 // - translating playing area locations to variables to store in the modules[] array (maybe modules is a bad name for it)
 
 #include <elapsedMillis.h>
+#include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_LSM303_U.h>
 
-Adafruit_LSM303_Mag_Unified mag = Adafruit_LSM303_Mag_Unified(30);
+Adafruit_LSM303_Mag_Unified mag = Adafruit_LSM303_Mag_Unified(12345);
 
 
 // define motor driver pins
@@ -39,12 +40,12 @@ Adafruit_LSM303_Mag_Unified mag = Adafruit_LSM303_Mag_Unified(30);
 #define ir_rec_r1 A0
 
 // define solonoid pin
-#define sol_enable 5
+#define sol_enable 29
 
 // define motor driver pins for front intake
 #define forward_mot1 14
 #define reverse_mot1 15
-#define forward_mot2 4
+#define forward_mot2 5
 #define reverse_mot2 3
 #define enable_mot1 16
 #define enable_mot2 2
@@ -57,40 +58,25 @@ bool intake_intaking = true;
 struct location{
   int x;
   int y;
-  bool dropOff;
+  bool pickUp;
 };
 
 location pos;
 
-bool leaving_shuttle = true;
-bool returning_to_shuttle = false;
+bool returning = false;
+int current_path_node = 0;
+int path_size = 7;
 
-int leave_stage = 0;
-int leave_stages = 3;
-
-//How to leave the shuttle
-location leave_shuttle_path[] = {
-    //The edge of the ramp leading out the spaceship
-   (location){360, 360, false},
-   (location){890, 360, false},
-   (location){890, 540, false},
-};
-
-bool docking_with_moonbase = false;
-bool undocking_with_moonbase = false;
-
-int dock_stage = 0;
-int dock_stages = 2;
-
-//How to dock/undock from the bay thing
-location docking_path[] = {
-  (location){710, 1350, false},
-  (location){1150, 1870, true},
-};
-
-//Cylinders. In the order we want to get them.
-location modules[] = {
-  (location){710,480,false},
+location path[] = {
+  //The edge of the ramp leading out the spaceship
+   (location){360, 170, false},
+   (location){890, 170, false},
+   //The first cylinder in our path
+   (location){950,200,true},
+   (location){1150, 0, true},
+   (location){1150, 0, true},
+   (location){1150, 0, true},
+   (location){1150, 0, true},
 };
 
 int current_module = 0;
@@ -123,7 +109,7 @@ elapsedMillis timeElapsed;
 
 bool finished = false;
 
-int motor_speed = 255;
+int motor_speed = 100;
 
 int l_motor_rotation = 0;
 int r_motor_rotation = 0;
@@ -157,12 +143,14 @@ void setup() {
   pinMode(ir_rec_f1,INPUT);
   pinMode(ir_rec_r0,INPUT);
   pinMode(ir_rec_r1,INPUT);
-  pinMode(enable_mot1,INPUT);
-  pinMode(enable_mot2,INPUT);
-  pinMode(forward_mot1,INPUT);
-  pinMode(forward_mot2,INPUT);
-  pinMode(reverse_mot1,INPUT);
-  pinMode(reverse_mot2,INPUT);
+  pinMode(enable_mot1,OUTPUT);
+  pinMode(enable_mot2,OUTPUT);
+  pinMode(forward_mot1,OUTPUT);
+  pinMode(forward_mot2,OUTPUT);
+  pinMode(reverse_mot1,OUTPUT);
+  pinMode(reverse_mot2,OUTPUT);
+  digitalWrite(enable_mot1,HIGH);
+  digitalWrite(enable_mot2,HIGH);
 
   setIntakePull();
   attachInterrupt(encoder_l,leftEncoderInterrupt,FALLING);
@@ -174,10 +162,14 @@ void setup() {
 // MAIN LOOP AND LOGIC
 // ===================
 void loop() {
-
-  rotate(0.7853);
-  delay(300);
-  return;
+   rotate(PI/2);
+   moveForwards();
+   delay(7000);
+   moveBackwards();
+   delay(7000);
+   dropOff();
+   delay(20000);
+   return;
 
   if (finished == true){
     return;
@@ -188,10 +180,10 @@ void loop() {
   if (atTarget() == true){
     stopMotors();
 
-    if (target.dropOff == true){
+    if (target.pickUp == true){
       reverseIntake();
       delay(10);
-      moveBackward();
+      moveBackwards();
       delay(100);
       reverseIntake();
     }  
@@ -200,16 +192,16 @@ void loop() {
   }
   
   if (timeElapsed >= 90000){
-    stopMotors();
-    launchRocket();
-    
-    finished = true;
+    finish();
   }
 
 }
 
 void finish(){
-  
+  stopMotors();
+  launchRocket();
+    
+  finished = true;
 }
 
 bool checkObstacle(){
@@ -227,36 +219,35 @@ void moveToTarget(){
   Serial.println("MOVING TO TARGET");
 
   Serial.println(getAngle(pos, target));
-  if(abs(getAngle(pos, target)) > 0.2){
+  if(abs(getAngle(pos, target)) > 0.1){
     face(target);
   }else{
-    moveForward();
+    moveForwards();
   }
 }
 
 void selectTarget(){
   Serial.println("SELECTING TARGET");
 
-  if(leave_stage == leave_stages){
-      leaving_shuttle = false;
+  if(path[current_path_node].pickUp==true){
+    path[current_path_node].pickUp = false;
+    returning = true;
   }
 
-  if(dock_stage == dock_stages){
-    docking_with_moonbase = false;
-  }
+  if(returning){
+    if(current_path_node == 0){
+      dropOff();
+      returning = false;
+    }else{
+      current_path_node -= 1;
+      target = path[current_path_node];
+    }
+  } else {
+    if(current_path_node < path_size){
+      current_path_node += 1;
+    }
 
-  //Leave the shuttle
-  if(leaving_shuttle == true){
-    target = leave_shuttle_path[leave_stage];
-    leave_stage++;
-  //Dock with the moon base
-  }else if(docking_with_moonbase == true){
-    target = docking_path[dock_stage];
-    dock_stage++;
-  }else{
-    //Otherwise we must pick up a cylinder
-    target = modules[current_module];
-    current_module++;
+    target = path[current_path_node];
   }
 }
 
@@ -265,12 +256,21 @@ void avoidObstacle(){
 }
 
 bool atTarget(){
-  if(distance(&pos, &target) < 500){
+  if(distance(&pos, &target) < 5000){
     Serial.println("TARGET REACHED");
     return true;
   }
 
   return false;
+}
+
+void dropOff(){
+  setIntakePush();
+  delay(5000);
+  moveBackwards();
+  delay(1000);
+  stopMotors();
+  setIntakePull();
 }
 
 
@@ -288,29 +288,29 @@ void reverseIntake(){
 
 void setIntakePush(){
   intake_intaking = false;
-  digitalWrite(forward_mot1,0);
-  digitalWrite(forward_mot2,0);
-  digitalWrite(reverse_mot1,255);
-  digitalWrite(reverse_mot2,255);
+  digitalWrite(forward_mot1,false);
+  digitalWrite(forward_mot2,false);
+  digitalWrite(reverse_mot1,true);
+  digitalWrite(reverse_mot2,true);
 }
 
 void setIntakePull(){
   intake_intaking = true;
-  digitalWrite(forward_mot1,255);
-  digitalWrite(forward_mot2,255);
-  digitalWrite(reverse_mot1,0);
-  digitalWrite(reverse_mot2,0);
+  digitalWrite(forward_mot1,true);
+  digitalWrite(forward_mot2,true);
+  digitalWrite(reverse_mot1,false);
+  digitalWrite(reverse_mot2,false);
 }
 
-void moveForward(){
-  digitalWrite(dir_r,LOW);
+void moveForwards(){
+  digitalWrite(dir_r,HIGH);
   digitalWrite(dir_l,HIGH);
   analogWrite(pwm_r,motor_speed);
   analogWrite(pwm_l,motor_speed);
 }
 
-void moveBackward(){
-  digitalWrite(dir_r,HIGH);
+void moveBackwards(){
+  digitalWrite(dir_r,LOW);
   digitalWrite(dir_l,LOW);
   analogWrite(pwm_r,motor_speed);
   analogWrite(pwm_l,motor_speed);
@@ -330,7 +330,7 @@ float getAngle(location x, location y){
   return atan2(y.x - x.x, y.y - x.y);
 }
 
-
+/*
 //Rotate using gyroscope
 void rotate(float angle){
   
@@ -340,54 +340,74 @@ void rotate(float angle){
   float startrot = atan2(event.magnetic.y,event.magnetic.x);
 
   bool clockwise = true;
-  if (angle > PI){
+  
+  if (angle < 0){
     clockwise = false;
-    angle = (2 * PI) - angle;
+    angle = -1* angle;
   }
+  
   if (clockwise == true){
-    digitalWrite(dir_r,HIGH);
+    digitalWrite(dir_r,LOW);
     digitalWrite(dir_l,HIGH);
   } else {
-    digitalWrite(dir_r,LOW);
+    digitalWrite(dir_r,HIGH);
     digitalWrite(dir_l,LOW);
   }
 
+  float rot = startrot;
+
+  analogWrite(pwm_r,motor_speed);
+  analogWrite(pwm_l,motor_speed);
+  
   Serial.println("ROTATING");
-  while (1){
+  while (rot - startrot < angle){
     mag.getEvent(&event);
-    float rot = atan2(event.magnetic.y,event.magnetic.x);
-    if(startrot - rot >= angle){
+    rot = atan2(event.magnetic.y,event.magnetic.x);
+    float delta = rot - startrot;
+    Serial.println(rot);
+    
+    if(delta >= angle){
       break;
     }
-
-    Serial.println("wew");
-    analogWrite(pwm_r,motor_speed);
-    analogWrite(pwm_l,motor_speed);
   }
 
   stopMotors();
 }
+*/
 
-/*
+//Rotate using encoders
 void rotate(float angle){
   // angle is in radians
   // 2000 pulses from the encoder is PI of rotation
-  // To go clockwise, dir_l and dir_r are set HIGH
-  int rotation_factor = 2000 / PI;
+  // To go clockwise, dir_l and dir_r are set HIGH and LOW, but not necessarily in that order
+  int rotation_factor = 2000/PI;
   bool clockwise = true;
+  Serial.println("ANGLE");
+  Serial.println(angle);
+  
+  if (angle < 0){
+    clockwise = false;
+    angle = fmod(PI + -1*angle, 2*PI);
+  }
+
   if (angle > PI){
     clockwise = false;
-    angle = (2 * PI) - angle;
+    angle = fmod(angle,PI);
   }
+  
   if (clockwise == true){
-    digitalWrite(dir_r,HIGH);
+    digitalWrite(dir_r,LOW);
     digitalWrite(dir_l,HIGH);
   } else {
     digitalWrite(dir_r,LOW);
-    digitalWrite(dir_l,LOW);
+    digitalWrite(dir_l,HIGH);
   }
-  int current_rot_l = l_motor_rotation;
-  int current_rot_r = r_motor_rotation;
+  
+  l_motor_rotation = 0;
+  r_motor_rotation = 0;
+  int current_rot_l = 0;
+  int current_rot_r = 0;
+  
   analogWrite(pwm_r,motor_speed);
   analogWrite(pwm_l,motor_speed);
   
@@ -397,18 +417,16 @@ void rotate(float angle){
   Serial.print(" | CLOCKWISE: ");
   Serial.println(clockwise);
   
-  int i = 0;
   while (l_motor_rotation - current_rot_l < angle * rotation_factor){
-    delay(10);
-    Serial.print(angle);
   }
 
   analogWrite(pwm_r,0);
   analogWrite(pwm_l,0);
-}*/
+}
 
 void leftEncoderInterrupt(){
   l_motor_rotation++;
+  Serial.println(l_motor_rotation);
 }
 
 void rightEncoderInterrupt(){
@@ -430,10 +448,8 @@ void serialEvent(){
       // Only other messages should be coordinates, comma separated
       int xData,yData;
       sscanf(serialMessage.string,"%d,%d",&xData,&yData);
-      pos.x = xData;
-      pos.y = yData;
 
-      //addToLL((location){xData,yData,false});
+      addToLL((location){xData,yData,false});
     }
     freeMessage(&serialMessage);
     initMessage(&serialMessage,10);
@@ -485,7 +501,7 @@ int distance(location* l1, location* l2){
   return dist;
 }
 
-/*void addToLL(location l){
+void addToLL(location l){
   if (listSize == listCap){
     rollingXTotal -= head->loc.x;
     rollingYTotal -= head->loc.y;
@@ -497,7 +513,7 @@ int distance(location* l1, location* l2){
       head = (node*)malloc(sizeof(node));
       head->loc = l;
       head->next = NULL;
-      } else {
+  } else {
       node* currentNode = head;
       while(currentNode->next != NULL){
         currentNode = currentNode->next;
@@ -505,9 +521,13 @@ int distance(location* l1, location* l2){
       currentNode->next = (node*)malloc(sizeof(node));
       currentNode->next->loc = l;
       currentNode->next->next = NULL;
-    }
-    rollingXTotal += l.x;
-    rollingYTotal += l.y;
-    listSize++;
-}*/
+  }
+  
+  rollingXTotal += l.x;
+  rollingYTotal += l.y;
+  listSize++;
+
+  pos.x = rollingXTotal/(float)listSize;
+  pos.y = rollingYTotal/(float)listSize;
+}
 
